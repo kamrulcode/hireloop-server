@@ -43,7 +43,28 @@ app.post("/jobs", async (req, res) => {
 // get job from api ******
 
 app.get("/jobs", async (req, res) => {
-  const result = await jobs.find().toArray();
+  const query = {};
+  console.log("query", req.query);
+  if (req.query) {
+    if (req.query.type) {
+      query.type = { $regex: new RegExp(`^${req.query.type}$`, "i") };
+    }
+    if (req.query.remote) {
+      query.remote = req.query.remote === "true";
+    }
+    if (req.query.search) {
+      query.$or = [
+        {
+          title: { $regex: req.query.search, $options: "i" },
+        },
+        { responsibilities: { $regex: req.query.search, $options: "i" } },
+        { requirements: { $regex: req.query.search, $options: "i" } },
+      ];
+    }
+  }
+
+  const cursor = jobs.find(query);
+  const result = await cursor.toArray();
   res.send(result);
 });
 
