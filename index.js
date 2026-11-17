@@ -42,30 +42,72 @@ app.post("/jobs", async (req, res) => {
 
 // get job from api ******
 
+// User input goes into a RegExp, so strip regex syntax first.
+const escapeRegex = (value) =>
+  String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 app.get("/jobs", async (req, res) => {
+  const { type, remote, category, search } = req.query;
   const query = {};
-  console.log("query", req.query);
-  if (req.query) {
-    if (req.query.type) {
-      query.type = { $regex: new RegExp(`^${req.query.type}$`, "i") };
-    }
-    if (req.query.remote) {
-      query.remote = req.query.remote === "true";
-    }
-    if (req.query.search) {
-      query.$or = [
-        {
-          title: { $regex: req.query.search, $options: "i" },
-        },
-        { responsibilities: { $regex: req.query.search, $options: "i" } },
-        { requirements: { $regex: req.query.search, $options: "i" } },
-      ];
-    }
+
+  if (type) {
+    query.type = { $regex: new RegExp(`^${escapeRegex(type)}$`, "i") };
   }
 
-  const cursor = jobs.find(query);
-  const result = await cursor.toArray();
-  res.send(result);
+  if (remote === "true" || remote === "false") {
+    query.remote = remote === "true";
+  }
+
+  if (category) {
+    query.category = { $regex: new RegExp(`^${escapeRegex(category)}$`, "i") };
+  }
+
+  if (search) {
+    const regex = new RegExp(escapeRegex(search), "i");
+    query.$or = [
+      { title: regex },
+      { company: regex },
+      { location: regex },
+      { category: regex },
+      { responsibilities: regex },
+      { qualifications: regex },
+    ];
+  }
+
+  try {
+    const result = await jobs.find(query).toArray();
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({
+      message: "Failed to load jobs",
+      error: String(error),
+    });
+  }
+});
+
+// get one job by id ****
+app.get("/jobs/:id", async (req, res) => {
+  const { id } = req.params;
+
+  // A malformed id would make `new ObjectId()` throw.
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({ message: "Invalid job id" });
+  }
+
+  try {
+    const job = await jobs.findOne({ _id: new ObjectId(id) });
+
+    if (!job) {
+      return res.status(404).send({ message: "Job not found" });
+    }
+
+    res.send(job);
+  } catch (error) {
+    res.status(500).send({
+      message: "Failed to load job",
+      error: String(error),
+    });
+  }
 });
 
 // update one job by id ******
